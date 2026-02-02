@@ -78,6 +78,7 @@ SimObject('AtomicSimpleCPU.py', sim_objects=[], tags='x86 isa')
 SimObject('TimingSimpleCPU.py', sim_objects=[], tags='x86 isa')
 SimObject('NonCachingSimpleCPU.py', sim_objects=[], tags='x86 isa')
 SimObject('O3CPU.py', sim_objects=[], tags='x86 isa')
+SimObject('MinorCPU.py', sim_objects=[], tags='x86 isa')
 
 DebugFlag('LocalApic', "Local APIC debugging", tags='x86 isa')
 DebugFlag('X86', "Generic X86 ISA debugging", tags='x86 isa')

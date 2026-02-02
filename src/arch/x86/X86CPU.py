@@ -33,6 +33,7 @@ from m5.objects.X86Decoder import X86Decoder
 from m5.objects.X86MMU import X86MMU
 from m5.objects.X86LocalApic import X86LocalApic
 from m5.objects.X86ISA import X86ISA
+from m5.objects.BaseMinorCPU import BaseMinorCPU
 
 class X86CPU:
     ArchDecoder = X86Decoder
@@ -60,3 +61,6 @@ class X86O3CPU(BaseO3CPU, X86CPU):
     # (it's a side effect of int reg renaming), so they should
     # never be the bottleneck here.
     numPhysCCRegs = Self.numPhysIntRegs * 5
+
+class X86MinorCPU(BaseMinorCPU, X86CPU):
+    mmu = X86MMU()
