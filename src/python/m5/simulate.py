@@ -175,6 +175,7 @@ def simulate(*args, **kwargs):
 
         # Reset to put the stats in a consistent state.
         stats.reset()
+        stats.startPeriodicStatSampler()
 
     if _drain_manager.isDrained():
         _drain_manager.resume()

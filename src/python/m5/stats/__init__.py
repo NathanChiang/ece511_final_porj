@@ -37,6 +37,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
+
 import m5
 
 import _m5.stats
@@ -50,6 +52,10 @@ from _m5.stats import schedStatEvent as schedEvent
 from _m5.stats import periodicStatDump
 
 outputList = []
+periodicStatFile = None
+periodicStatPeriod = 0
+periodicStatEventStarted = False
+periodicStatLastValues = {}
 
 # Dictionary of stat visitor factories populated by the _url_factory
 # visitor.
@@ -241,6 +247,164 @@ def printStatVisitorTypes():
 
         # Try to extract the factory doc string
         print_doc(inspect.getdoc(factory))
+
+def enablePeriodicStatFile(path, period):
+    global periodicStatFile
+    global periodicStatPeriod
+    global periodicStatEventStarted
+    global periodicStatLastValues
+
+    outdir = os.path.dirname(path)
+    if outdir:
+        os.makedirs(outdir, exist_ok=True)
+
+    periodicStatFile = path
+    periodicStatPeriod = period
+    periodicStatEventStarted = False
+    periodicStatLastValues = {}
+
+    with open(periodicStatFile, "w") as period_file:
+        period_file.write("tick ipc l2_hit_rate\n")
+
+def _find_stat_in_group(group, stat_name, prefix=""):
+    for stat in group.getStats():
+        full_name = stat.name if not prefix else "%s.%s" % (prefix, stat.name)
+        if stat.name == stat_name or full_name == stat_name:
+            return stat
+
+    for child_name, child in group.getStatGroups().items():
+        child_prefix = child_name if not prefix else "%s.%s" % (
+            prefix, child_name)
+        found = _find_stat_in_group(child, stat_name, child_prefix)
+        if found is not None:
+            return found
+
+    return None
+
+def _resolve_stat(stat_name):
+    stat = stats_dict.get(stat_name)
+    if stat is None:
+        root = Root.getInstance()
+        if root is not None:
+            stat = _find_stat_in_group(root, stat_name)
+    return stat
+
+def _get_stat_value(stat_name):
+    base_name, _, selector = stat_name.partition("::")
+    stat = _resolve_stat(base_name)
+    if stat is None:
+        fatal("Unable to find statistic '%s'" % stat_name)
+
+    stat.prepare()
+
+    if isinstance(stat, _m5.stats.ScalarInfo):
+        if selector:
+            fatal("Statistic '%s' does not support selector '%s'" %
+                  (base_name, selector))
+        return stat.value
+
+    if isinstance(stat, (_m5.stats.VectorInfo, _m5.stats.FormulaInfo)):
+        if selector == "total":
+            return stat.total
+
+        if selector:
+            for index, subname in enumerate(stat.subnames):
+                if str(subname) == selector:
+                    return stat.value[index]
+            fatal("Statistic '%s' does not have selector '%s'" %
+                  (base_name, selector))
+
+        if stat.size == 1:
+            return stat.value[0]
+
+        fatal("Statistic '%s' requires a selector" % stat_name)
+
+    fatal("Statistic '%s' is not supported for period.txt output" %
+          stat_name)
+
+def _get_first_available_stat(stat_names):
+    for stat_name in stat_names:
+        if _resolve_stat(stat_name.partition("::")[0]) is not None:
+            return stat_name
+    fatal("Unable to find any of these statistics: %s" %
+          ", ".join(stat_names))
+
+def _snapshot_periodic_stats():
+    inst_stat = _get_first_available_stat([
+        "system.cpu0.committedInsts::total",
+        "system.cpu0.numInsts",
+    ])
+    cycle_stat = _get_first_available_stat([
+        "system.cpu0.numCycles",
+    ])
+    hit_stat = _get_first_available_stat([
+        "system.cpu0.l2cache.overallHits::total",
+    ])
+    access_stat = _get_first_available_stat([
+        "system.cpu0.l2cache.overallAccesses::total",
+    ])
+
+    return {
+        "insts": _get_stat_value(inst_stat),
+        "cycles": _get_stat_value(cycle_stat),
+        "hits": _get_stat_value(hit_stat),
+        "accesses": _get_stat_value(access_stat),
+    }
+
+def _schedule_periodic_stat_event():
+    import m5.event as event
+
+    if not periodicStatPeriod:
+        return
+
+    sampler_event = event.create(_sample_periodic_stats)
+    event.mainq.schedule(sampler_event, m5.curTick() + periodicStatPeriod)
+
+def _sample_periodic_stats():
+    global periodicStatLastValues
+
+    if not periodicStatFile or not periodicStatPeriod:
+        return
+
+    tick = m5.curTick()
+    current = _snapshot_periodic_stats()
+    previous = periodicStatLastValues
+
+    delta_insts = current["insts"]
+    delta_cycles = current["cycles"]
+    delta_hits = current["hits"]
+    delta_accesses = current["accesses"]
+
+    if previous:
+        delta_insts -= previous["insts"]
+        delta_cycles -= previous["cycles"]
+        delta_hits -= previous["hits"]
+        delta_accesses -= previous["accesses"]
+
+    ipc = float("nan")
+    hit_rate = float("nan")
+
+    if delta_cycles > 0:
+        ipc = delta_insts / delta_cycles
+    if delta_accesses > 0:
+        hit_rate = delta_hits / delta_accesses
+
+    with open(periodicStatFile, "a") as period_file:
+        period_file.write("%d %s %s\n" % (tick, ipc, hit_rate))
+
+    periodicStatLastValues = current
+    _schedule_periodic_stat_event()
+
+def startPeriodicStatSampler():
+    global periodicStatEventStarted
+    global periodicStatLastValues
+
+    if not periodicStatFile or not periodicStatPeriod or periodicStatEventStarted:
+        return
+
+    periodicStatLastValues = {}
+    periodicStatEventStarted = True
+    _schedule_periodic_stat_event()
 
 def initSimStats():
     _m5.stats.initSimStats()

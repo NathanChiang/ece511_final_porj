@@ -179,6 +179,10 @@ def addNoISAOptions(parser):
         "sets max_insts_all_threads for cpus 0, 1, 3, 5 and 7 "
         "Direct parameters of the root object are not accessible, "
         "only parameters of its children.")
+    parser.add_argument(
+        "--stats-period", type=int, default=0, metavar="TICKS",
+        help="Sample ipc and system.cpu0.l2cache hit rate every TICKS "
+        "into period.txt")
 
 # Add common options that assume a non-NULL ISA.
 

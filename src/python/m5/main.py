@@ -112,6 +112,9 @@ def parse_options():
     group("Statistics Options")
     option("--stats-file", metavar="FILE", default="stats.txt",
         help="Sets the output file for statistics [Default: %default]")
+    option("--stats-period", metavar="TICK", type='int', default=0,
+        help="Sample ipc and system.cpu0.l2cache hit rate every TICK "
+             "ticks into period.txt")
     option("--stats-help",
            action="callback", callback=_stats_help,
            help="Display documentation for available stat visitors")
@@ -342,6 +345,10 @@ def main():
 
     # set stats options
     stats.addStatVisitor(options.stats_file)
+    if options.stats_period > 0:
+        stats.enablePeriodicStatFile(
+            os.path.join(options.outdir, "period.txt"),
+            options.stats_period)
 
     # Disable listeners unless running interactively or explicitly
     # enabled

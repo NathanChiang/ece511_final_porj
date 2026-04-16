@@ -450,6 +450,11 @@ def run(options, root, testsys, cpu_class):
         stat_root_simobjs.extend(root.get_simobj(stat_root_str))
     m5.stats.global_dump_roots = stat_root_simobjs
 
+    if getattr(options, "stats_period", 0) > 0:
+        m5.stats.enablePeriodicStatFile(
+            joinpath(m5.options.outdir, "period.txt"),
+            options.stats_period)
+
     np = options.num_cpus
     switch_cpus = None
 
