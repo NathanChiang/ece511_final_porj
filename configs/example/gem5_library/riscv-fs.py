@@ -65,9 +65,14 @@ cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
 # Setup the system memory.
 memory = SingleChannelDDR3_1600()
 
-# Setup a single core Processor.
+# # Setup a single core Processor.
+# processor = SimpleProcessor(
+#     cpu_type=CPUTypes.TIMING, isa=ISA.RISCV, num_cores=1
+# )
+
+# Boot with atomic for faster kernel boot, switch to timing for more accurate simulation data
 processor = SimpleProcessor(
-    cpu_type=CPUTypes.TIMING, isa=ISA.RISCV, num_cores=1
+    cpu_type=CPUTypes.ATOMIC, isa=ISA.RISCV, num_cores=1
 )
 
 # Setup the board.
@@ -84,10 +89,31 @@ board.set_kernel_disk_workload(
                    disk_image=Resource("riscv-disk-img"),
 )
 
-simulator = Simulator(board=board)
+# simulator = Simulator(board=board)
+
+from gem5.simulate.exit_event import ExitEvent
+
+def handle_exit():
+    processor.switch()   # first EXIT: switch ATOMIC → TIMING
+    yield False          # continue simulation (do not stop)
+    yield True           # second EXIT (from /sbin/m5 exit): stop simulation
+
+simulator = Simulator(
+    board=board,
+    on_exit_event={
+        ExitEvent.EXIT: handle_exit()
+    }
+)
+
 print("Beginning simulation!")
 # Note: This simulation will never stop. You can access the terminal upon boot
 # using m5term (`./util/term`): `./m5term localhost <port>`. Note the `<port>`
 # value is obtained from the gem5 terminal stdout. Look out for
 # "system.platform.terminal: Listening for connections on port <port>".
+
+import m5
+
+# Dump stats every 5 trillion ticks so you can monitor progress
+m5.stats.periodicStatDump(5000000000000)
+
 simulator.run()
