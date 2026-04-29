@@ -30,9 +30,23 @@
 
 from m5.params import *
 from m5.proxy import *
+from m5.SimObject import SimObject
 
 from m5.objects.BaseTLB import BaseTLB
 from m5.objects.ClockedObject import ClockedObject
+
+class RiscvTlbEvictionController(SimObject):
+    type = 'RiscvTlbEvictionController'
+    cxx_class = 'gem5::RiscvISA::TlbEvictionController'
+    cxx_header = 'arch/riscv/tlb_eviction_controller.hh'
+
+    entries = Param.Unsigned(32, "Number of high-cost evicted TLB entries")
+    cost_threshold = Param.Unsigned(
+            3, "Minimum estimated eviction cost to retain an entry")
+    dram_weight = Param.Unsigned(3, "Cost weight for entries likely to need DRAM")
+    walk_weight = Param.Unsigned(1, "Cost weight for each page-table level")
+    small_page_extra_weight = Param.Unsigned(
+            1, "Extra cost weight for base-page entries")
 
 class RiscvPagetableWalker(ClockedObject):
     type = 'RiscvPagetableWalker'
@@ -53,6 +67,8 @@ class RiscvTLB(BaseTLB):
     cxx_header = 'arch/riscv/tlb.hh'
 
     size = Param.Int(64, "TLB size")
+    eviction_controller = Param.RiscvTlbEvictionController(
+            NULL, "Controller notified when this TLB evicts entries")
     walker = Param.RiscvPagetableWalker(\
             RiscvPagetableWalker(), "page table walker")
     # Grab the pma_checker from the MMU

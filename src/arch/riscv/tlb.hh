@@ -55,6 +55,7 @@ class ThreadContext;
 namespace RiscvISA {
 
 class Walker;
+class TlbEvictionController;
 
 class TLB : public BaseTLB
 {
@@ -66,6 +67,7 @@ class TLB : public BaseTLB
     TlbEntryTrie trie;          // for quick access
     EntryList freeList;         // free entries
     uint64_t lruSeq;
+    TlbEvictionController *evictionController;
 
     Walker *walker;
 

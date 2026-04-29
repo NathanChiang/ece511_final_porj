@@ -41,6 +41,7 @@
 #include "arch/riscv/pma_checker.hh"
 #include "arch/riscv/pmp.hh"
 #include "arch/riscv/pra_constants.hh"
+#include "arch/riscv/tlb_eviction_controller.hh"
 #include "arch/riscv/utility.hh"
 #include "base/inifile.hh"
 #include "base/str.hh"
@@ -72,7 +73,8 @@ buildKey(Addr vpn, uint16_t asid)
 
 TLB::TLB(const Params &p) :
     BaseTLB(p), size(p.size), tlb(size),
-    lruSeq(0), stats(this), pma(p.pma_checker),
+    lruSeq(0), evictionController(p.eviction_controller), stats(this),
+    pma(p.pma_checker),
     pmp(p.pmp)
 {
     for (size_t x = 0; x < size; x++) {
@@ -102,6 +104,9 @@ TLB::evictLRU()
             lru = i;
     }
 
+    if (evictionController)
+        evictionController->notifyEviction(tlb[lru]);
+
     remove(lru);
 }
 
@@ -109,6 +114,15 @@ TlbEntry *
 TLB::lookup(Addr vpn, uint16_t asid, BaseMMU::Mode mode, bool hidden)
 {
     TlbEntry *entry = trie.lookup(buildKey(vpn, asid));
+    bool controller_hit = false;
+
+    if (!entry && evictionController) {
+        TlbEntry controllerEntry;
+        if (evictionController->lookup(vpn, asid, controllerEntry)) {
+            entry = insert(controllerEntry.vaddr, controllerEntry);
+            controller_hit = entry != nullptr;
+        }
+    }
 
     if (!hidden) {
         if (entry)
@@ -134,6 +148,10 @@ TLB::lookup(Addr vpn, uint16_t asid, BaseMMU::Mode mode, bool hidden)
 
         DPRINTF(TLBVerbose, "lookup(vpn=%#x, asid=%#x): %s ppn %#x\n",
                 vpn, asid, entry ? "hit" : "miss", entry ? entry->paddr : 0);
+        if (controller_hit) {
+            DPRINTF(TLB, "lookup(vpn=%#x, asid=%#x): controller promoted "
+                    "entry ppn %#x\n", vpn, asid, entry->paddr);
+        }
     }
 
     return entry;
