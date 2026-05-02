@@ -1,5 +1,6 @@
 #include "arch/riscv/tlb_eviction_controller.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 
@@ -16,6 +17,23 @@ namespace gem5
 namespace RiscvISA
 {
 
+namespace
+{
+
+TlbEvictionController::Predictor
+parsePredictor(const std::string &name)
+{
+    if (name == "deterministic")
+        return TlbEvictionController::Predictor::Deterministic;
+    if (name == "linear")
+        return TlbEvictionController::Predictor::Linear;
+    fatal("Unknown RISC-V TLB eviction predictor '%s'; expected "
+          "'deterministic' or 'linear'\n", name.c_str());
+    return TlbEvictionController::Predictor::Deterministic;
+}
+
+} // anonymous namespace
+
 TlbEvictionController::TlbEvictionController(const Params &p)
     : SimObject(p), cachePort(name() + ".cache_port", *this),
       system(p.system),
@@ -25,7 +43,12 @@ TlbEvictionController::TlbEvictionController(const Params &p)
       highPriorityTouches(p.high_priority_touches),
       costThreshold(p.cost_threshold),
       dramWeight(p.dram_weight), walkWeight(p.walk_weight),
-      smallPageExtraWeight(p.small_page_extra_weight), stats(this)
+      smallPageExtraWeight(p.small_page_extra_weight),
+      predictor(parsePredictor(p.predictor)),
+      linearWeights(p.linear_weights),
+      linearBias(p.linear_bias),
+      linearThreshold(p.linear_threshold),
+      stats(this)
 {
 }
 
@@ -41,6 +64,8 @@ void
 TlbEvictionController::notifyEviction(const TlbEntry &entry)
 {
     const uint64_t cost = estimateCost(entry);
+    const double score = estimateScore(entry);
+    const double threshold = retentionThreshold();
     const Addr block_addr = cacheBlockAddr(entry);
 
     stats.evictions++;
@@ -50,13 +75,19 @@ TlbEvictionController::notifyEviction(const TlbEntry &entry)
     stats.lastAsid = entry.asid;
     stats.lastPte = entry.pte;
     stats.lastCost = cost;
+    stats.lastScore = score;
     stats.lastBlockAddr = block_addr;
 
-    if (!numEntries || cost < costThreshold) {
+    if (predictor == Predictor::Linear)
+        stats.linearPredictions++;
+    else
+        stats.deterministicPredictions++;
+
+    if (!numEntries || score < threshold) {
         stats.droppedEvictions++;
         DPRINTF(TLB, "TLB eviction controller dropped vaddr %#x asid %#x "
-                "cost %u threshold %u\n", entry.vaddr, entry.asid, cost,
-                costThreshold);
+                "cost %u score %.3f threshold %.3f\n", entry.vaddr,
+                entry.asid, cost, score, threshold);
         return;
     }
 
@@ -77,15 +108,16 @@ TlbEvictionController::notifyEviction(const TlbEntry &entry)
     VictimaEntry victim;
     victim.blockAddr = block_addr;
     victim.cost = cost;
+    victim.score = score;
     victim.entry = entry;
     victim.entry.trieHandle = NULL;
     directory[makeKey(entry.vaddr, entry.asid)] = victim;
     stats.retainedEvictions++;
 
     DPRINTF(TLB, "TLB eviction controller retained vaddr %#x asid %#x "
-            "paddr %#x pte %#x logBytes %u cost %u in L2 block %#x "
-            "latency %u\n", entry.vaddr, entry.asid, entry.paddr,
-            entry.pte, entry.logBytes, cost, block_addr, latency);
+            "paddr %#x pte %#x logBytes %u cost %u score %.3f in L2 block "
+            "%#x latency %u\n", entry.vaddr, entry.asid, entry.paddr,
+            entry.pte, entry.logBytes, cost, score, block_addr, latency);
 }
 
 bool
@@ -124,8 +156,9 @@ TlbEvictionController::lookup(Addr vpn, uint16_t asid, TlbEntry &entry)
         stats.l2Hits++;
 
         DPRINTF(TLB, "TLB eviction controller hit vaddr %#x asid %#x "
-                "paddr %#x cost %u block %#x latency %u\n", entry.vaddr,
-                entry.asid, entry.paddr, victima_entry.cost,
+                "paddr %#x cost %u score %.3f block %#x latency %u\n",
+                entry.vaddr, entry.asid, entry.paddr, victima_entry.cost,
+                victima_entry.score,
                 victima_entry.blockAddr, latency);
         return true;
     }
@@ -188,6 +221,55 @@ TlbEvictionController::estimateCost(const TlbEntry &entry) const
     return cost;
 }
 
+double
+TlbEvictionController::estimateScore(const TlbEntry &entry) const
+{
+    switch (predictor) {
+      case Predictor::Deterministic:
+        return static_cast<double>(estimateCost(entry));
+      case Predictor::Linear:
+        return estimateLinearScore(entry);
+    }
+
+    panic("Unhandled RISC-V TLB eviction predictor\n");
+    return 0.0;
+}
+
+double
+TlbEvictionController::estimateLinearScore(const TlbEntry &entry) const
+{
+    const double deterministic_cost = estimateCost(entry);
+    const double walk_levels = entry.logBytes <= 12 ? 3.0 : 1.0;
+    const double is_small_page = entry.logBytes <= 12 ? 1.0 : 0.0;
+
+    const double features[] = {
+        deterministic_cost,
+        walk_levels,
+        is_small_page,
+        entry.pte.a ? 0.0 : 1.0,
+        entry.pte.d ? 0.0 : 1.0,
+        entry.pte.w ? 1.0 : 0.0,
+        entry.pte.x ? 1.0 : 0.0,
+        entry.pte.u ? 1.0 : 0.0,
+        static_cast<double>(entry.logBytes),
+    };
+
+    double score = linearBias;
+    const size_t feature_count = sizeof(features) / sizeof(features[0]);
+    const size_t count = std::min(linearWeights.size(), feature_count);
+    for (size_t i = 0; i < count; ++i)
+        score += linearWeights[i] * features[i];
+    return score;
+}
+
+double
+TlbEvictionController::retentionThreshold() const
+{
+    if (predictor == Predictor::Linear)
+        return linearThreshold;
+    return static_cast<double>(costThreshold);
+}
+
 TlbEvictionController::CachePort::CachePort(
         const std::string &name, TlbEvictionController &owner)
     : RequestPort(name, &owner), owner(owner)
@@ -237,10 +319,16 @@ TlbEvictionController::ControllerStats::ControllerStats(
              "PTE of the last evicted TLB entry"),
     ADD_STAT(lastCost, statistics::units::Count::get(),
              "Estimated cost of the last evicted TLB entry"),
+    ADD_STAT(lastScore, statistics::units::Count::get(),
+             "Predictor score of the last evicted TLB entry"),
     ADD_STAT(lastBlockAddr, statistics::units::Count::get(),
              "Physical L2 block address used for the last Victima entry"),
     ADD_STAT(lastLatency, statistics::units::Count::get(),
-             "Atomic latency of the last Victima L2 access")
+             "Atomic latency of the last Victima L2 access"),
+    ADD_STAT(deterministicPredictions, statistics::units::Count::get(),
+             "Number of evictions scored by the deterministic predictor"),
+    ADD_STAT(linearPredictions, statistics::units::Count::get(),
+             "Number of evictions scored by the offline linear predictor")
 {
 }
 
