@@ -56,6 +56,17 @@ class RiscvTlbEvictionController(SimObject):
     walk_weight = Param.Unsigned(1, "Cost weight for each page-table level")
     small_page_extra_weight = Param.Unsigned(
             1, "Extra cost weight for base-page entries")
+    predictor = Param.String(
+            "deterministic",
+            "Victima retention predictor: deterministic or linear")
+    linear_weights = VectorParam.Float(
+            [1.0],
+            "Offline-trained linear predictor weights. Feature order: "
+            "deterministic_cost, walk_levels, is_small_page, missing_accessed, "
+            "missing_dirty, writable, executable, user_page, log_bytes")
+    linear_bias = Param.Float(0.0, "Offline-trained linear predictor bias")
+    linear_threshold = Param.Float(
+            3.0, "Minimum linear predictor score to retain an entry")
 
 class RiscvPagetableWalker(ClockedObject):
     type = 'RiscvPagetableWalker'

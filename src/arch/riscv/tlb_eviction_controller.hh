@@ -3,6 +3,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "arch/riscv/pagetable.hh"
 #include "base/bitfield.hh"
@@ -34,6 +35,12 @@ class TlbEvictionController : public SimObject
     void notifyEviction(const TlbEntry &entry);
     bool lookup(Addr vpn, uint16_t asid, TlbEntry &entry);
 
+    enum class Predictor
+    {
+        Deterministic,
+        Linear,
+    };
+
   private:
     class CachePort : public RequestPort
     {
@@ -52,10 +59,14 @@ class TlbEvictionController : public SimObject
     {
         Addr blockAddr = 0;
         uint64_t cost = 0;
+        double score = 0.0;
         TlbEntry entry;
     };
 
     uint64_t estimateCost(const TlbEntry &entry) const;
+    double estimateScore(const TlbEntry &entry) const;
+    double estimateLinearScore(const TlbEntry &entry) const;
+    double retentionThreshold() const;
     uint64_t makeKey(Addr vaddr, uint16_t asid) const;
     Addr cacheBlockAddr(const TlbEntry &entry) const;
     Tick touchCacheBlock(Addr block_addr);
@@ -72,6 +83,10 @@ class TlbEvictionController : public SimObject
     const uint64_t dramWeight;
     const uint64_t walkWeight;
     const uint64_t smallPageExtraWeight;
+    const Predictor predictor;
+    const std::vector<double> linearWeights;
+    const double linearBias;
+    const double linearThreshold;
     std::unordered_map<uint64_t, VictimaEntry> directory;
 
     struct ControllerStats : public statistics::Group
@@ -92,8 +107,11 @@ class TlbEvictionController : public SimObject
         statistics::Scalar lastAsid;
         statistics::Scalar lastPte;
         statistics::Scalar lastCost;
+        statistics::Scalar lastScore;
         statistics::Scalar lastBlockAddr;
         statistics::Scalar lastLatency;
+        statistics::Scalar deterministicPredictions;
+        statistics::Scalar linearPredictions;
     } stats;
 };
 
