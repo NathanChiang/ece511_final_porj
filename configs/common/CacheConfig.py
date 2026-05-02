@@ -163,6 +163,11 @@ def config_cache(options, system):
             # from the CPU in question
             system.cpu[i].addTwoLevelCacheHierarchy(icache, dcache, l2cache,
                                                   iwalkcache, dwalkcache)
+            if buildEnv['TARGET_ISA'] == 'riscv':
+                for tlb in (system.cpu[i].mmu.itb, system.cpu[i].mmu.dtb):
+                    if tlb.eviction_controller != NULL:
+                        tlb.eviction_controller.cache_port = \
+                                system.cpu[i].toL2Bus.cpu_side_ports
 
             if options.memchecker:
                 # The mem_side ports of the caches haven't been connected yet.
