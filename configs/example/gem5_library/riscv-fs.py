@@ -83,6 +83,18 @@ board = RiscvBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
+
+core = processor.get_cores()[0]
+mmu = core.get_mmu()
+
+for tlb in (mmu.itb, mmu.dtb):
+    ctrl = tlb.eviction_controller
+    ctrl.predictor = "linear"
+    ctrl.linear_bias = -1.25
+    ctrl.linear_threshold = 0.0
+    ctrl.linear_weights = [0.8, 0.5, 1.2, 0.7, 1.0, 0.1, 0.1, 0.0, -0.05]
+
+
 # Set the Full System workload.
 board.set_kernel_disk_workload(
                    kernel=Resource("riscv-bootloader-vmlinux-5.10"),
