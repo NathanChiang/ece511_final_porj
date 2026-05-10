@@ -57,7 +57,7 @@ class RiscvTlbEvictionController(SimObject):
     small_page_extra_weight = Param.Unsigned(
             1, "Extra cost weight for base-page entries")
     predictor = Param.String(
-            "deterministic",
+            "linear",
             "Victima retention predictor: deterministic or linear")
     linear_weights = VectorParam.Float(
             [1.0],

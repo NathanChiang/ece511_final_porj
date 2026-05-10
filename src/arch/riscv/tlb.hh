@@ -81,6 +81,9 @@ class TLB : public BaseTLB
         statistics::Scalar writeHits;
         statistics::Scalar writeMisses;
         statistics::Scalar writeAccesses;
+        statistics::Scalar victimLookups;
+        statistics::Scalar victimHits;
+        statistics::Scalar victimMisses;
 
         statistics::Formula hits;
         statistics::Formula misses;
