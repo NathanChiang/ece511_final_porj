@@ -117,10 +117,20 @@ TLB::lookup(Addr vpn, uint16_t asid, BaseMMU::Mode mode, bool hidden)
     bool controller_hit = false;
 
     if (!entry && evictionController) {
+        if (!hidden)
+            stats.victimLookups++;
+
         TlbEntry controllerEntry;
         if (evictionController->lookup(vpn, asid, controllerEntry)) {
             entry = insert(controllerEntry.vaddr, controllerEntry);
             controller_hit = entry != nullptr;
+        }
+
+        if (!hidden) {
+            if (controller_hit)
+                stats.victimHits++;
+            else
+                stats.victimMisses++;
         }
     }
 
@@ -542,6 +552,12 @@ TLB::TlbStats::TlbStats(statistics::Group *parent)
     ADD_STAT(writeHits, statistics::units::Count::get(), "write hits"),
     ADD_STAT(writeMisses, statistics::units::Count::get(), "write misses"),
     ADD_STAT(writeAccesses, statistics::units::Count::get(), "write accesses"),
+    ADD_STAT(victimLookups, statistics::units::Count::get(),
+             "Local TLB misses that probed the Victima eviction controller"),
+    ADD_STAT(victimHits, statistics::units::Count::get(),
+             "Local TLB misses rescued by the Victima eviction controller"),
+    ADD_STAT(victimMisses, statistics::units::Count::get(),
+             "Local TLB misses not found in the Victima eviction controller"),
     ADD_STAT(hits, statistics::units::Count::get(),
              "Total TLB (read and write) hits", readHits + writeHits),
     ADD_STAT(misses, statistics::units::Count::get(),

@@ -32,7 +32,6 @@ from .caches.mmu_cache import MMUCache
 from ...boards.abstract_board import AbstractBoard
 from ....isas import ISA
 
-from m5.params import NULL
 from m5.objects import Cache, BaseXBar, SystemXBar, BadAddr, Port
 
 from ....utils.override import *
@@ -128,7 +127,6 @@ class PrivateL1CacheHierarchy(AbstractClassicCacheHierarchy):
             cpu.connect_walker_ports(
                 self.iptw_caches[i].cpu_side, self.dptw_caches[i].cpu_side
             )
-            self._connect_riscv_victima_ports(cpu, self.membus.cpu_side_ports)
 
             if board.get_processor().get_isa() == ISA.X86:
                 int_req_port = self.membus.mem_side_ports
@@ -151,12 +149,3 @@ class PrivateL1CacheHierarchy(AbstractClassicCacheHierarchy):
         )
         self.iocache.mem_side = self.membus.cpu_side_ports
         self.iocache.cpu_side = board.get_mem_side_coherent_io_port()
-
-    def _connect_riscv_victima_ports(self, cpu, cache_port: Port) -> None:
-        if cpu.get_isa() != ISA.RISCV:
-            return
-
-        mmu = cpu.get_mmu()
-        for tlb in (mmu.itb, mmu.dtb):
-            if tlb.eviction_controller != NULL:
-                tlb.eviction_controller.cache_port = cache_port
