@@ -51,6 +51,7 @@ from gem5.isas import ISA
 from gem5.utils.requires import requires
 from gem5.resources.resource import CustomDiskImageResource, Resource
 from gem5.simulate.simulator import Simulator
+import m5
 
 # Run a check to ensure the right version of gem5 is being used.
 requires(isa_required=ISA.RISCV)
@@ -88,17 +89,26 @@ board = RiscvBoard(
 for core in processor.cores:
     mmu = core.get_mmu()
 
-    # Stress the DTLB so the victim/linear eviction path has a visible
-    # opportunity to recover recently evicted translations.
+    # Stress the DTLB so the deterministic victim path can be compared against
+    # the linear predictor with the same TLB and victim-buffer capacity.
     mmu.dtb.size = 8
-    mmu.dtb.eviction_controller.entries = 4096
+    mmu.dtb.eviction_controller.entries = 64
+    mmu.dtb.eviction_controller.oracle_trace = True
+    mmu.dtb.eviction_controller.oracle_entries = 64
+    mmu.dtb.eviction_controller.oracle_trace_file = (
+        f"{m5.options.outdir}/dtb_oracle_trace.csv"
+    )
 
     for tlb in (mmu.itb, mmu.dtb):
         ctrl = tlb.eviction_controller
         ctrl.predictor = "linear"
+        ctrl.cost_threshold = 3
         ctrl.linear_bias = -1.25
         ctrl.linear_threshold = 0.0
-        ctrl.linear_weights = [0.8, 0.5, 1.2, 0.7, 1.0, 0.1, 0.1, 0.0, -0.05]
+        ctrl.linear_weights = [
+            0.8, 0.5, 1.2, 0.7, 1.0, 0.1, 0.1, 0.0, -0.05,
+            -0.05, -0.25, 0.4, 0.1,
+        ]
 
 
 # Set the Full System workload.
@@ -116,8 +126,6 @@ print("Beginning simulation!")
 # using m5term (`./util/term`): `./m5term localhost <port>`. Note the `<port>`
 # value is obtained from the gem5 terminal stdout. Look out for
 # "system.platform.terminal: Listening for connections on port <port>".
-
-import m5
 
 # Dump stats every 5 trillion ticks so you can monitor progress
 m5.stats.periodicStatDump(5000000000000)

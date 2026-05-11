@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <memory>
 
 #include "arch/riscv/page_size.hh"
@@ -9,6 +10,7 @@
 #include "base/trace.hh"
 #include "debug/TLB.hh"
 #include "mem/request.hh"
+#include "sim/core.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -48,6 +50,9 @@ TlbEvictionController::TlbEvictionController(const Params &p)
       linearWeights(p.linear_weights),
       linearBias(p.linear_bias),
       linearThreshold(p.linear_threshold),
+      oracleTrace(p.oracle_trace),
+      oracleTraceFile(p.oracle_trace_file),
+      oracleEntries(p.oracle_entries),
       stats(this)
 {
 }
@@ -58,6 +63,29 @@ TlbEvictionController::getPort(const std::string &if_name, PortID idx)
     if (if_name == "cache_port")
         return cachePort;
     return SimObject::getPort(if_name, idx);
+}
+
+void
+TlbEvictionController::resetStats()
+{
+    SimObject::resetStats();
+
+    if (!oracleTrace)
+        return;
+
+    oracleDirectory.clear();
+    oracleInsertionOrder.clear();
+    nextOracleId = 0;
+
+    if (oracleStream.is_open())
+        oracleStream.close();
+    oracleHeaderWritten = false;
+
+    // gem5 invokes resetStats() once before simulation starts. The wrapper's
+    // m5_reset_stats() call happens later and marks the benchmark ROI.
+    oracleActive = curTick() > 0;
+    if (oracleActive)
+        openOracleTrace();
 }
 
 void
@@ -77,6 +105,8 @@ TlbEvictionController::notifyEviction(const TlbEntry &entry)
     stats.lastCost = cost;
     stats.lastScore = score;
     stats.lastBlockAddr = block_addr;
+
+    observeEviction(entry, block_addr, cost, score);
 
     if (predictor == Predictor::Linear)
         stats.linearPredictions++;
@@ -118,6 +148,8 @@ TlbEvictionController::notifyEviction(const TlbEntry &entry)
 bool
 TlbEvictionController::lookup(Addr vpn, uint16_t asid, TlbEntry &entry)
 {
+    observeLookup(vpn, asid);
+
     for (auto it = directory.begin(); it != directory.end(); ++it) {
         VictimaEntry &victima_entry = it->second;
         if (victima_entry.entry.asid != asid)
@@ -183,11 +215,18 @@ TlbEvictionController::demapPage(Addr vpn, uint16_t asid)
             ++it;
         }
     }
+
+    finalizeMatchingOracleEntries(vpn, asid, "demap");
 }
 
 void
 TlbEvictionController::flushAll()
 {
+    for (const auto &oracle_entry : oracleDirectory)
+        finalizeOracleEntry(oracle_entry.second, 0, "flush");
+    oracleDirectory.clear();
+    oracleInsertionOrder.clear();
+
     directory.clear();
     insertionOrder.clear();
 }
@@ -216,6 +255,175 @@ TlbEvictionController::retain(uint64_t key, const VictimaEntry &victim)
 
     directory[key] = victim;
     insertionOrder.push_back(key);
+}
+
+void
+TlbEvictionController::observeEviction(const TlbEntry &entry, Addr block_addr,
+                                       uint64_t cost, double score)
+{
+    if (!oracleTrace || !oracleEntries)
+        return;
+    if (!oracleActive)
+        return;
+
+    OracleEntry oracle_entry;
+    oracle_entry.id = ++nextOracleId;
+    oracle_entry.blockAddr = block_addr;
+    oracle_entry.cost = cost;
+    oracle_entry.score = score;
+    oracle_entry.evictionTick = curTick();
+    oracle_entry.entry = entry;
+    oracle_entry.entry.trieHandle = NULL;
+
+    oracleRetain(makeKey(entry.vaddr, entry.asid), oracle_entry);
+}
+
+void
+TlbEvictionController::observeLookup(Addr vpn, uint16_t asid)
+{
+    if (!oracleTrace || !oracleEntries)
+        return;
+    if (!oracleActive)
+        return;
+
+    for (auto it = oracleDirectory.begin(); it != oracleDirectory.end(); ++it) {
+        const TlbEntry &entry = it->second.entry;
+        if (entry.asid != asid)
+            continue;
+
+        const Addr mask = ~(entry.size() - 1);
+        if ((vpn & mask) != entry.vaddr)
+            continue;
+
+        finalizeOracleEntry(it->second, 1, "reuse");
+        oracleInsertionOrder.remove(it->first);
+        oracleDirectory.erase(it);
+        return;
+    }
+}
+
+void
+TlbEvictionController::oracleRetain(uint64_t key, const OracleEntry &entry)
+{
+    auto existing = oracleDirectory.find(key);
+    if (existing != oracleDirectory.end()) {
+        finalizeOracleEntry(existing->second, 0, "replace");
+        existing->second = entry;
+        oracleInsertionOrder.remove(key);
+        oracleInsertionOrder.push_back(key);
+        return;
+    }
+
+    while (oracleDirectory.size() >= oracleEntries &&
+           !oracleInsertionOrder.empty()) {
+        const uint64_t old_key = oracleInsertionOrder.front();
+        auto old_entry = oracleDirectory.find(old_key);
+        if (old_entry != oracleDirectory.end()) {
+            finalizeOracleEntry(old_entry->second, 0, "capacity");
+            oracleDirectory.erase(old_entry);
+        }
+        oracleInsertionOrder.pop_front();
+    }
+
+    oracleDirectory[key] = entry;
+    oracleInsertionOrder.push_back(key);
+}
+
+void
+TlbEvictionController::finalizeMatchingOracleEntries(Addr vpn, uint16_t asid,
+                                                     const char *reason)
+{
+    if (!oracleTrace)
+        return;
+    if (!oracleActive)
+        return;
+
+    for (auto it = oracleDirectory.begin(); it != oracleDirectory.end();) {
+        const TlbEntry &entry = it->second.entry;
+        const Addr mask = ~(entry.size() - 1);
+        const bool vpn_match = vpn == 0 || (vpn & mask) == entry.vaddr;
+        const bool asid_match = asid == 0 || entry.asid == asid;
+
+        if (vpn_match && asid_match) {
+            finalizeOracleEntry(it->second, 0, reason);
+            oracleInsertionOrder.remove(it->first);
+            it = oracleDirectory.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void
+TlbEvictionController::finalizeOracleEntry(const OracleEntry &oracle_entry,
+                                           unsigned label,
+                                           const char *reason)
+{
+    if (!oracleTrace)
+        return;
+    if (!oracleActive)
+        return;
+
+    openOracleTrace();
+    if (!oracleStream.is_open())
+        return;
+
+    const TlbEntry &entry = oracle_entry.entry;
+    const double walk_levels = entry.logBytes <= 12 ? 3.0 : 1.0;
+    const double is_small_page = entry.logBytes <= 12 ? 1.0 : 0.0;
+    const Tick now = curTick();
+    const Tick victim_residency = now >= oracle_entry.evictionTick ?
+        now - oracle_entry.evictionTick : 0;
+
+    oracleStream
+        << label << ','
+        << reason << ','
+        << oracle_entry.id << ','
+        << oracle_entry.evictionTick << ','
+        << now << ','
+        << victim_residency << ','
+        << entry.vaddr << ','
+        << entry.asid << ','
+        << entry.paddr << ','
+        << entry.logBytes << ','
+        << entry.pte.a << ','
+        << entry.pte.d << ','
+        << entry.pte.w << ','
+        << entry.pte.x << ','
+        << entry.pte.u << ','
+        << oracle_entry.cost << ','
+        << oracle_entry.score << ','
+        << walk_levels << ','
+        << is_small_page << ','
+        << residencyFeature(entry) << ','
+        << recencyFeature(entry) << ','
+        << accessFeature(entry) << ','
+        << reuseDensityFeature(entry)
+        << '\n';
+}
+
+void
+TlbEvictionController::openOracleTrace()
+{
+    if (oracleStream.is_open())
+        return;
+
+    oracleStream.open(oracleTraceFile, std::ios::out | std::ios::trunc);
+    if (!oracleStream.is_open()) {
+        warn("Could not open RISC-V TLB oracle trace file '%s'\n",
+             oracleTraceFile);
+        return;
+    }
+
+    if (!oracleHeaderWritten) {
+        oracleStream
+            << "label,reason,eviction_id,eviction_tick,resolve_tick,"
+            << "victim_residency,vaddr,asid,paddr,log_bytes,pte_a,pte_d,"
+            << "pte_w,pte_x,pte_u,deterministic_cost,predictor_score,"
+            << "walk_levels,is_small_page,log_residency,log_recency,"
+            << "log_access_count,reuse_density\n";
+        oracleHeaderWritten = true;
+    }
 }
 
 Addr
@@ -267,6 +475,44 @@ TlbEvictionController::estimateCost(const TlbEntry &entry) const
 }
 
 double
+TlbEvictionController::log2Feature(uint64_t value) const
+{
+    return std::log2(static_cast<double>(value) + 1.0);
+}
+
+double
+TlbEvictionController::residencyFeature(const TlbEntry &entry) const
+{
+    const Tick now = curTick();
+    const Tick residency = now >= entry.insertTick ? now - entry.insertTick : 0;
+    return log2Feature(residency);
+}
+
+double
+TlbEvictionController::recencyFeature(const TlbEntry &entry) const
+{
+    const Tick now = curTick();
+    const Tick recency = now >= entry.lastAccessTick ?
+        now - entry.lastAccessTick : 0;
+    return log2Feature(recency);
+}
+
+double
+TlbEvictionController::accessFeature(const TlbEntry &entry) const
+{
+    return log2Feature(entry.accessCount);
+}
+
+double
+TlbEvictionController::reuseDensityFeature(const TlbEntry &entry) const
+{
+    const Tick now = curTick();
+    const Tick residency = now >= entry.insertTick ? now - entry.insertTick : 0;
+    return static_cast<double>(entry.accessCount) /
+        static_cast<double>(residency + 1);
+}
+
+double
 TlbEvictionController::estimateScore(const TlbEntry &entry) const
 {
     switch (predictor) {
@@ -297,6 +543,10 @@ TlbEvictionController::estimateLinearScore(const TlbEntry &entry) const
         entry.pte.x ? 1.0 : 0.0,
         entry.pte.u ? 1.0 : 0.0,
         static_cast<double>(entry.logBytes),
+        residencyFeature(entry),
+        recencyFeature(entry),
+        accessFeature(entry),
+        reuseDensityFeature(entry),
     };
 
     double score = linearBias;

@@ -54,6 +54,7 @@
 #include "sim/full_system.hh"
 #include "sim/process.hh"
 #include "sim/system.hh"
+#include "sim/core.hh"
 
 namespace gem5
 {
@@ -135,8 +136,11 @@ TLB::lookup(Addr vpn, uint16_t asid, BaseMMU::Mode mode, bool hidden)
     }
 
     if (!hidden) {
-        if (entry)
+        if (entry) {
             entry->lruSeq = nextSeq();
+            entry->lastAccessTick = curTick();
+            entry->accessCount++;
+        }
 
         if (mode == BaseMMU::Write)
             stats.writeAccesses++;
@@ -180,10 +184,16 @@ TLB::insert(Addr vpn, const TlbEntry &entry)
     if (newEntry) {
         // update PTE flags (maybe we set the dirty/writable flag)
         auto trie_handle = newEntry->trieHandle;
+        const Tick insert_tick = newEntry->insertTick;
+        const Tick last_access_tick = newEntry->lastAccessTick;
+        const uint64_t access_count = newEntry->accessCount;
         *newEntry = entry;
         newEntry->vaddr = vpn;
         newEntry->lruSeq = nextSeq();
         newEntry->trieHandle = trie_handle;
+        newEntry->insertTick = insert_tick;
+        newEntry->lastAccessTick = last_access_tick;
+        newEntry->accessCount = access_count;
         assert(newEntry->vaddr == vpn);
         return newEntry;
     }
@@ -198,6 +208,9 @@ TLB::insert(Addr vpn, const TlbEntry &entry)
     *newEntry = entry;
     newEntry->lruSeq = nextSeq();
     newEntry->vaddr = vpn;
+    newEntry->insertTick = curTick();
+    newEntry->lastAccessTick = curTick();
+    newEntry->accessCount = 0;
     newEntry->trieHandle =
     trie.insert(key, TlbEntryTrie::MaxBits - entry.logBytes, newEntry);
     return newEntry;

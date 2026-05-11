@@ -47,6 +47,9 @@ TlbEntry::serialize(CheckpointOut &cp) const
     SERIALIZE_SCALAR(asid);
     SERIALIZE_SCALAR(pte);
     SERIALIZE_SCALAR(lruSeq);
+    SERIALIZE_SCALAR(insertTick);
+    SERIALIZE_SCALAR(lastAccessTick);
+    SERIALIZE_SCALAR(accessCount);
 }
 
 void
@@ -58,6 +61,9 @@ TlbEntry::unserialize(CheckpointIn &cp)
     UNSERIALIZE_SCALAR(asid);
     UNSERIALIZE_SCALAR(pte);
     UNSERIALIZE_SCALAR(lruSeq);
+    UNSERIALIZE_SCALAR(insertTick);
+    UNSERIALIZE_SCALAR(lastAccessTick);
+    UNSERIALIZE_SCALAR(accessCount);
 }
 
 } // namespace RiscvISA

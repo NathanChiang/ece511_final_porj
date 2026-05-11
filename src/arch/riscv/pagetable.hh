@@ -98,8 +98,15 @@ struct TlbEntry : public Serializable
     // A sequence number to keep track of LRU.
     uint64_t lruSeq;
 
+    // Offline predictor/training metadata. These are simulator-side features
+    // and model compact hardware counters/age buckets in later experiments.
+    Tick insertTick;
+    Tick lastAccessTick;
+    uint64_t accessCount;
+
     TlbEntry()
-        : paddr(0), vaddr(0), logBytes(0), pte(), lruSeq(0)
+        : paddr(0), vaddr(0), logBytes(0), pte(), lruSeq(0),
+          insertTick(0), lastAccessTick(0), accessCount(0)
     {}
 
     // Return the page size in bytes

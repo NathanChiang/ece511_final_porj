@@ -2,6 +2,7 @@
 #define __ARCH_RISCV_TLB_EVICTION_CONTROLLER_HH__
 
 #include <list>
+#include <fstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -32,6 +33,7 @@ class TlbEvictionController : public SimObject
 
     Port &getPort(const std::string &if_name,
                   PortID idx=InvalidPortID) override;
+    void resetStats() override;
 
     void notifyEviction(const TlbEntry &entry);
     bool lookup(Addr vpn, uint16_t asid, TlbEntry &entry);
@@ -66,6 +68,16 @@ class TlbEvictionController : public SimObject
         TlbEntry entry;
     };
 
+    struct OracleEntry
+    {
+        uint64_t id = 0;
+        Addr blockAddr = 0;
+        uint64_t cost = 0;
+        double score = 0.0;
+        Tick evictionTick = 0;
+        TlbEntry entry;
+    };
+
     uint64_t estimateCost(const TlbEntry &entry) const;
     double estimateScore(const TlbEntry &entry) const;
     double estimateLinearScore(const TlbEntry &entry) const;
@@ -75,6 +87,20 @@ class TlbEvictionController : public SimObject
     Addr cacheBlockAddr(const TlbEntry &entry) const;
     Tick touchCacheBlock(Addr block_addr);
     bool isBackingHit(Tick latency) const;
+    void observeEviction(const TlbEntry &entry, Addr block_addr,
+                         uint64_t cost, double score);
+    void observeLookup(Addr vpn, uint16_t asid);
+    void oracleRetain(uint64_t key, const OracleEntry &entry);
+    void finalizeOracleEntry(const OracleEntry &entry, unsigned label,
+                             const char *reason);
+    void finalizeMatchingOracleEntries(Addr vpn, uint16_t asid,
+                                       const char *reason);
+    void openOracleTrace();
+    double log2Feature(uint64_t value) const;
+    double residencyFeature(const TlbEntry &entry) const;
+    double recencyFeature(const TlbEntry &entry) const;
+    double accessFeature(const TlbEntry &entry) const;
+    double reuseDensityFeature(const TlbEntry &entry) const;
 
     CachePort cachePort;
     System *system;
@@ -91,8 +117,17 @@ class TlbEvictionController : public SimObject
     const std::vector<double> linearWeights;
     const double linearBias;
     const double linearThreshold;
+    const bool oracleTrace;
+    const std::string oracleTraceFile;
+    const uint64_t oracleEntries;
     std::unordered_map<uint64_t, VictimaEntry> directory;
     std::list<uint64_t> insertionOrder;
+    std::unordered_map<uint64_t, OracleEntry> oracleDirectory;
+    std::list<uint64_t> oracleInsertionOrder;
+    std::ofstream oracleStream;
+    bool oracleHeaderWritten = false;
+    bool oracleActive = false;
+    uint64_t nextOracleId = 0;
 
     struct ControllerStats : public statistics::Group
     {

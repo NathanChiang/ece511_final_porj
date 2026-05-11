@@ -64,10 +64,17 @@ class RiscvTlbEvictionController(SimObject):
             [1.0],
             "Offline-trained linear predictor weights. Feature order: "
             "deterministic_cost, walk_levels, is_small_page, missing_accessed, "
-            "missing_dirty, writable, executable, user_page, log_bytes")
+            "missing_dirty, writable, executable, user_page, log_bytes, "
+            "log_residency, log_recency, log_access_count, reuse_density")
     linear_bias = Param.Float(0.0, "Offline-trained linear predictor bias")
     linear_threshold = Param.Float(
             3.0, "Minimum linear predictor score to retain an entry")
+    oracle_trace = Param.Bool(
+            False, "Enable oracle CSV trace generation for offline training")
+    oracle_trace_file = Param.String(
+            "tlb_oracle_trace.csv", "CSV output path for oracle training rows")
+    oracle_entries = Param.Unsigned(
+            64, "Capacity of the oracle shadow victim buffer used for labels")
 
 class RiscvPagetableWalker(ClockedObject):
     type = 'RiscvPagetableWalker'
