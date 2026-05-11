@@ -40,16 +40,17 @@ class RiscvTlbEvictionController(SimObject):
     cxx_class = 'gem5::RiscvISA::TlbEvictionController'
     cxx_header = 'arch/riscv/tlb_eviction_controller.hh'
 
-    cache_port = RequestPort("Port used to inject Victima blocks into L2")
+    cache_port = RequestPort(
+            "Optional port used to touch a backing cache for Victima entries")
     system = Param.System(Parent.any, "system object")
     entries = Param.Unsigned(
-            32, "Nonzero enables Victima retention; capacity comes from L2")
+            32, "Standalone Victima victim-cache entry capacity")
     cache_line_size = Param.Unsigned(
             64, "Cache line size used for Victima blocks")
     l2_hit_latency = Param.Latency(
-            "20ns", "Maximum atomic access latency treated as an L2 Victima hit")
+            "20ns", "Maximum backing-cache access latency treated as a hit")
     high_priority_touches = Param.Unsigned(
-            2, "Number of L2 touches used to keep retained entries high priority")
+            2, "Number of backing-cache touches for retained entries")
     cost_threshold = Param.Unsigned(
             3, "Minimum estimated eviction cost to retain an entry")
     dram_weight = Param.Unsigned(3, "Cost weight for entries likely to need DRAM")

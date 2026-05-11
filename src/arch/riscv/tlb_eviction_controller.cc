@@ -39,7 +39,7 @@ TlbEvictionController::TlbEvictionController(const Params &p)
       system(p.system),
       requestorId(system->getRequestorId(this)),
       numEntries(p.entries), cacheLineSize(p.cache_line_size),
-      l2HitLatency(p.l2_hit_latency),
+      backingHitLatency(p.l2_hit_latency),
       highPriorityTouches(p.high_priority_touches),
       costThreshold(p.cost_threshold),
       dramWeight(p.dram_weight), walkWeight(p.walk_weight),
@@ -91,19 +91,14 @@ TlbEvictionController::notifyEviction(const TlbEntry &entry)
         return;
     }
 
-    if (!cachePort.isConnected()) {
-        stats.disconnectedDrops++;
-        DPRINTF(TLB, "TLB eviction controller has no L2 cache port; "
-                "dropping vaddr %#x asid %#x\n", entry.vaddr, entry.asid);
-        return;
-    }
-
     Tick latency = 0;
-    const unsigned touches = highPriorityTouches ? highPriorityTouches : 1;
-    for (unsigned i = 0; i < touches; ++i)
-        latency = touchCacheBlock(block_addr);
+    if (cachePort.isConnected()) {
+        const unsigned touches = highPriorityTouches ? highPriorityTouches : 1;
+        for (unsigned i = 0; i < touches; ++i)
+            latency = touchCacheBlock(block_addr);
+        stats.backingFills++;
+    }
     stats.lastLatency = latency;
-    stats.l2Fills++;
 
     VictimaEntry victim;
     victim.blockAddr = block_addr;
@@ -111,11 +106,11 @@ TlbEvictionController::notifyEviction(const TlbEntry &entry)
     victim.score = score;
     victim.entry = entry;
     victim.entry.trieHandle = NULL;
-    directory[makeKey(entry.vaddr, entry.asid)] = victim;
+    retain(makeKey(entry.vaddr, entry.asid), victim);
     stats.retainedEvictions++;
 
     DPRINTF(TLB, "TLB eviction controller retained vaddr %#x asid %#x "
-            "paddr %#x pte %#x logBytes %u cost %u score %.3f in L2 block "
+            "paddr %#x pte %#x logBytes %u cost %u score %.3f victim block "
             "%#x latency %u\n", entry.vaddr, entry.asid, entry.paddr,
             entry.pte, entry.logBytes, cost, score, block_addr, latency);
 }
@@ -132,28 +127,28 @@ TlbEvictionController::lookup(Addr vpn, uint16_t asid, TlbEntry &entry)
         if ((vpn & mask) != victima_entry.entry.vaddr)
             continue;
 
-        if (!cachePort.isConnected()) {
-            stats.disconnectedDrops++;
-            stats.l2Misses++;
-            return false;
+        Tick latency = 0;
+        if (cachePort.isConnected()) {
+            latency = touchCacheBlock(victima_entry.blockAddr);
+            stats.backingProbes++;
         }
-
-        Tick latency = touchCacheBlock(victima_entry.blockAddr);
         stats.lastLatency = latency;
-        stats.l2Probes++;
 
-        if (!isL2Hit(latency)) {
-            stats.l2Misses++;
+        if (cachePort.isConnected() && !isBackingHit(latency)) {
+            stats.victimMisses++;
             DPRINTF(TLB, "TLB eviction controller miss for vaddr %#x asid "
-                    "%#x: L2 block %#x latency %u exceeds hit latency %u\n",
+                    "%#x: backing block %#x latency %u exceeds hit latency %u\n",
                     vpn, asid, victima_entry.blockAddr, latency,
-                    l2HitLatency);
+                    backingHitLatency);
             directory.erase(it);
             return false;
         }
 
         entry = victima_entry.entry;
-        stats.l2Hits++;
+        stats.victimHits++;
+        insertionOrder.remove(makeKey(victima_entry.entry.vaddr,
+                                      victima_entry.entry.asid));
+        directory.erase(it);
 
         DPRINTF(TLB, "TLB eviction controller hit vaddr %#x asid %#x "
                 "paddr %#x cost %u score %.3f block %#x latency %u\n",
@@ -163,7 +158,7 @@ TlbEvictionController::lookup(Addr vpn, uint16_t asid, TlbEntry &entry)
         return true;
     }
 
-    stats.l2Misses++;
+    stats.victimMisses++;
     return false;
 }
 
@@ -171,6 +166,26 @@ uint64_t
 TlbEvictionController::makeKey(Addr vaddr, uint16_t asid) const
 {
     return (static_cast<uint64_t>(asid) << 48) | (vaddr & mask(48));
+}
+
+void
+TlbEvictionController::retain(uint64_t key, const VictimaEntry &victim)
+{
+    auto existing = directory.find(key);
+    if (existing != directory.end()) {
+        existing->second = victim;
+        insertionOrder.remove(key);
+        insertionOrder.push_back(key);
+        return;
+    }
+
+    while (directory.size() >= numEntries && !insertionOrder.empty()) {
+        directory.erase(insertionOrder.front());
+        insertionOrder.pop_front();
+    }
+
+    directory[key] = victim;
+    insertionOrder.push_back(key);
 }
 
 Addr
@@ -202,9 +217,9 @@ TlbEvictionController::touchCacheBlock(Addr block_addr)
 }
 
 bool
-TlbEvictionController::isL2Hit(Tick latency) const
+TlbEvictionController::isBackingHit(Tick latency) const
 {
-    return latency <= l2HitLatency;
+    return latency <= backingHitLatency;
 }
 
 uint64_t
@@ -297,14 +312,14 @@ TlbEvictionController::ControllerStats::ControllerStats(
              "Number of high-cost TLB evictions retained in the controller"),
     ADD_STAT(droppedEvictions, statistics::units::Count::get(),
              "Number of low-cost TLB evictions dropped by the controller"),
-    ADD_STAT(l2Hits, statistics::units::Count::get(),
-             "Number of TLB lookups served by retained high-cost entries"),
-    ADD_STAT(l2Misses, statistics::units::Count::get(),
-             "Number of Victima lookups that missed in L2"),
-    ADD_STAT(l2Fills, statistics::units::Count::get(),
-             "Number of Victima blocks injected into L2"),
-    ADD_STAT(l2Probes, statistics::units::Count::get(),
-             "Number of Victima lookup probes sent to L2"),
+    ADD_STAT(victimHits, statistics::units::Count::get(),
+             "Number of TLB misses served by retained victim-cache entries"),
+    ADD_STAT(victimMisses, statistics::units::Count::get(),
+             "Number of victim-cache lookups that missed"),
+    ADD_STAT(backingFills, statistics::units::Count::get(),
+             "Number of retained victim entries touched in a backing cache"),
+    ADD_STAT(backingProbes, statistics::units::Count::get(),
+             "Number of victim-cache hits probed in a backing cache"),
     ADD_STAT(disconnectedDrops, statistics::units::Count::get(),
              "Number of Victima operations dropped without a connected port"),
     ADD_STAT(lastVaddr, statistics::units::Count::get(),
@@ -322,9 +337,9 @@ TlbEvictionController::ControllerStats::ControllerStats(
     ADD_STAT(lastScore, statistics::units::Count::get(),
              "Predictor score of the last evicted TLB entry"),
     ADD_STAT(lastBlockAddr, statistics::units::Count::get(),
-             "Physical L2 block address used for the last Victima entry"),
+             "Physical backing block address used for the last Victima entry"),
     ADD_STAT(lastLatency, statistics::units::Count::get(),
-             "Atomic latency of the last Victima L2 access"),
+             "Atomic latency of the last Victima backing-cache access"),
     ADD_STAT(deterministicPredictions, statistics::units::Count::get(),
              "Number of evictions scored by the deterministic predictor"),
     ADD_STAT(linearPredictions, statistics::units::Count::get(),

@@ -1,6 +1,7 @@
 #ifndef __ARCH_RISCV_TLB_EVICTION_CONTROLLER_HH__
 #define __ARCH_RISCV_TLB_EVICTION_CONTROLLER_HH__
 
+#include <list>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -68,16 +69,17 @@ class TlbEvictionController : public SimObject
     double estimateLinearScore(const TlbEntry &entry) const;
     double retentionThreshold() const;
     uint64_t makeKey(Addr vaddr, uint16_t asid) const;
+    void retain(uint64_t key, const VictimaEntry &victim);
     Addr cacheBlockAddr(const TlbEntry &entry) const;
     Tick touchCacheBlock(Addr block_addr);
-    bool isL2Hit(Tick latency) const;
+    bool isBackingHit(Tick latency) const;
 
     CachePort cachePort;
     System *system;
     const RequestorID requestorId;
     const uint64_t numEntries;
     const unsigned cacheLineSize;
-    const Tick l2HitLatency;
+    const Tick backingHitLatency;
     const unsigned highPriorityTouches;
     const uint64_t costThreshold;
     const uint64_t dramWeight;
@@ -88,6 +90,7 @@ class TlbEvictionController : public SimObject
     const double linearBias;
     const double linearThreshold;
     std::unordered_map<uint64_t, VictimaEntry> directory;
+    std::list<uint64_t> insertionOrder;
 
     struct ControllerStats : public statistics::Group
     {
@@ -96,10 +99,10 @@ class TlbEvictionController : public SimObject
         statistics::Scalar evictions;
         statistics::Scalar retainedEvictions;
         statistics::Scalar droppedEvictions;
-        statistics::Scalar l2Hits;
-        statistics::Scalar l2Misses;
-        statistics::Scalar l2Fills;
-        statistics::Scalar l2Probes;
+        statistics::Scalar victimHits;
+        statistics::Scalar victimMisses;
+        statistics::Scalar backingFills;
+        statistics::Scalar backingProbes;
         statistics::Scalar disconnectedDrops;
         statistics::Scalar lastVaddr;
         statistics::Scalar lastPaddr;
