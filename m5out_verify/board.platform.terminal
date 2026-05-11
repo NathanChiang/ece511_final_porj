@@ -1,0 +1,158 @@
+[    0.000000] Linux version 5.10.0 (hn@amarillo) (riscv64-linux-gnu-gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, GNU ld (GNU Binutils for Ubuntu) 2.30) #1 SMP Mon Jul 19 13:32:59 PDT 2021
+[    0.000000] OF: fdt: Ignoring memory range 0x80000000 - 0x80200000
+[    0.000000] efi: UEFI not found.
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000080200000-0x00000000ffffffff]
+[    0.000000]   Normal   [mem 0x0000000100000000-0x000000027fffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080200000-0x000000027fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080200000-0x000000027fffffff]
+[    0.000000] software IO TLB: mapped [mem 0x00000000fbfff000-0x00000000fffff000] (64MB)
+[    0.000000] SBI specification v0.1 detected
+[    0.000000] riscv: ISA extensions acdfim
+[    0.000000] riscv: ELF capabilities acdfim
+[    0.000000] percpu: Embedded 16 pages/cpu s26200 r8192 d31144 u65536
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 2067975
+[    0.000000] Kernel command line: console=ttyS0 root=/dev/vda ro
+[    0.000000] Dentry cache hash table entries: 1048576 (order: 11, 8388608 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 524288 (order: 10, 4194304 bytes, linear)
+[    0.000000] Sorting __ex_table...
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] Memory: 8180096K/8386560K available (5866K kernel code, 3086K rwdata, 2048K rodata, 189K init, 341K bss, 206464K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=8 to nr_cpu_ids=1.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 64 local interrupts mapped
+[    0.000000] plic: plic@c000000: mapped 20 interrupts with 1 handlers for 2 contexts.
+[    0.000000] random: get_random_bytes called from start_kernel+0x316/0x496 with crng_init=0
+[    0.000000] riscv_timer_init_dt: Registering clocksource cpuid [0] hartid [0]
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x24e6a1710, max_idle_ns: 440795202120 ns
+[    0.000044] sched_clock: 64 bits at 10MHz, resolution 100ns, wraps every 4398046511100ns
+[    0.000810] Console: colour dummy device 80x25
+[    0.000960] Calibrating delay loop (skipped), value calculated using timer frequency.. 20.00 BogoMIPS (lpj=40000)
+[    0.001083] pid_max: default: 32768 minimum: 301
+[    0.002188] Mount-cache hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.002487] Mountpoint-cache hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.008055] rcu: Hierarchical SRCU implementation.
+[    0.008719] EFI services will not be available.
+[    0.009074] smp: Bringing up secondary CPUs ...
+[    0.009148] smp: Brought up 1 node, 1 CPU
+[    0.012022] devtmpfs: initialized
+[    0.017312] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.017419] futex hash table entries: 256 (order: 2, 16384 bytes, linear)
+[    0.018860] NET: Registered protocol family 16
+[    0.091640] vgaarb: loaded
+[    0.093301] SCSI subsystem initialized
+[    0.095267] usbcore: registered new interface driver usbfs
+[    0.095539] usbcore: registered new interface driver hub
+[    0.095762] usbcore: registered new device driver usb
+[    0.099442] clocksource: Switched to clocksource riscv_clocksource
+[    0.127231] NET: Registered protocol family 2
+[    0.131125] tcp_listen_portaddr_hash hash table entries: 4096 (order: 4, 65536 bytes, linear)
+[    0.131959] TCP established hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.140704] TCP bind hash table entries: 65536 (order: 8, 1048576 bytes, linear)
+[    0.150026] TCP: Hash tables configured (established 65536 bind 65536)
+[    0.150461] UDP hash table entries: 4096 (order: 5, 131072 bytes, linear)
+[    0.152043] UDP-Lite hash table entries: 4096 (order: 5, 131072 bytes, linear)
+[    0.154027] NET: Registered protocol family 1
+[    0.155813] RPC: Registered named UNIX socket transport module.
+[    0.155880] RPC: Registered udp transport module.
+[    0.155944] RPC: Registered tcp transport module.
+[    0.156011] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.156086] PCI: CLS 0 bytes, default 64
+[    0.158826] workingset: timestamp_bits=62 max_order=21 bucket_order=0
+[    0.208190] NFS: Registering the id_resolver key type
+[    0.208308] Key type id_resolver registered
+[    0.208371] Key type id_legacy registered
+[    0.208982] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.210509] NET: Registered protocol family 38
+[    0.210702] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 254)
+[    0.210769] io scheduler mq-deadline registered
+[    0.210833] io scheduler kyber registered
+[    0.379109] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    0.384603] printk: console [ttyS0] disabled
+[    0.384758] 10000000.uart: ttyS0 at MMIO 0x10000000 (irq = 1, base_baud = 230400) is a 8250
+[    0.393520] printk: console [ttyS0] enabled
+[    0.394800] [drm] radeon kernel modesetting enabled.
+[    0.418246] loop: module loaded
+[    0.419278] virtio_blk virtio0: [vda] 102400 512-byte logical blocks (52.4 MB/50.0 MiB)
+[    0.419522] vda: detected capacity change from 0 to 52428800
+[    0.426936] libphy: Fixed MDIO Bus: probed
+[    0.430853] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    0.431000] ehci-pci: EHCI PCI platform driver
+[    0.431275] ehci-platform: EHCI generic platform driver
+[    0.431647] ohci_hcd: USB 1.1 'Open' Host Controller (OHCI) Driver
+[    0.431789] ohci-pci: OHCI PCI platform driver
+[    0.432064] ohci-platform: OHCI generic platform driver
+[    0.433415] usbcore: registered new interface driver uas
+[    0.433775] usbcore: registered new interface driver usb-storage
+[    0.434393] mousedev: PS/2 mouse device common for all mice
+[    0.435561] usbcore: registered new interface driver usbhid
+[    0.435690] usbhid: USB HID core driver
+[    0.440238] NET: Registered protocol family 10
+[    0.443821] Segment Routing with IPv6
+[    0.444277] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    0.447206] NET: Registered protocol family 17
+[    0.447748] Key type dns_resolver registered
+[    0.457622] EXT4-fs (vda): mounted filesystem without journal. Opts: (null)
+[    0.457876] VFS: Mounted root (ext4 filesystem) readonly on device 254:0.
+[    0.461140] devtmpfs: mounted
+[    0.461677] Freeing unused kernel memory: 188K
+[    0.465955] Run /sbin/init as init process
+[    0.720645] syslogd[56]: unhandled signal 11 code 0x1 at 0x0000003fdb37a508
+[    0.720847] CPU: 0 PID: 56 Comm: syslogd Not tainted 5.10.0 #1
+[    0.721003] epc: 0000003fdb37a508 ra : 000000000001b574 sp : 0000003fff809a10
+[    0.721176]  gp : 00000000000f4dc0 tp : 0000003fe021f710 t0 : 0000003fdb3851a0
+[    0.721349]  t1 : 0000000000000198 t2 : 00000000000f4390 s0 : 0000003fff809ab8
+[    0.721524]  s1 : 0000003fe021f720 a0 : 00000000000f63d1 a1 : 0000003fff809ab8
+[    0.721694]  a2 : 000000000000000a a3 : 0000000000000009 a4 : 0000000000000001
+[    0.721866]  a5 : 0000000000000031 a6 : 0000003fe027d466 a7 : 000000000000003f
+[    0.722038]  s2 : 00000000000f6260 s3 : 00000000000f5000 s4 : 0000000000000009
+[    0.722210]  s5 : 00000000000d7000 s6 : 0000000000000000 s7 : 00000000000f64d0
+[    0.722381]  s8 : 00000000000f6424 s9 : 0000000000000054 s10: 000000000000000a
+[    0.722554]  s11: 0000000000000068 t3 : 0000003fdb37a508 t4 : 0000000000000002
+[    0.722717]  t5 : 0000000000003c58 t6 : 0000000000000000
+[    0.722864] status: 0000000200004020 badaddr: 0000003fdb37a508 cause: 000000000000000c
+[    0.774525] rcS[38]: unhandled signal 11 code 0x1 at 0x0000000000000048 in busybox[10000+e3000]
+[    0.774801] CPU: 0 PID: 38 Comm: rcS Not tainted 5.10.0 #1
+[    0.774952] epc: 0000000000066492 ra : 0000003fe9523800 sp : 0000003fff9051d0
+[    0.775125]  gp : 00000000000f4dc0 tp : 0000003fe9374710 t0 : 0000003fe93db944
+[    0.775300]  t1 : 000000000001870c t2 : ffffffffffffffff s0 : 00000000000f7df0
+[    0.775615]  s1 : 00000000000f6260 a0 : 0000000000000011 a1 : 0000003fff9051d0
+[    0.775787]  a2 : 0000003fff905250 a3 : 0000000000000000 a4 : 0000000000000001
+[    0.775958]  a5 : 0000000000000000 a6 : 000000000000000f a7 : 0000000000000104
+[    0.776130]  s2 : 00000000000f7df0 s3 : 00000000000f4fbc s4 : 00000000000f7b85
+[    0.776304]  s5 : 00000000000f6260 s6 : 0000000000000000 s7 : ffffffffffffffff
+[    0.776476]  s8 : 00000000000f62b4 s9 : 0000000000000000 s10: 00000000000d4ef0
+[    0.776649]  s11: 00000000000f7b85 t3 : 0000003fe93f6612 t4 : 0000000000001000
+[    0.776814]  t5 : 0000003fe9475098 t6 : 0000000000000000
+[    0.776959] status: 0000000200004020 badaddr: 0000000000000048 cause: 000000000000000f
+[    0.787700] klogd[58]: unhandled signal 11 code 0x1 at 0xfffffffffffffffc
+[    0.787897] CPU: 0 PID: 58 Comm: klogd Not tainted 5.10.0 #1
+[    0.788049] epc: fffffffffffffffe ra : 0000000000076b86 sp : 0000003fff8f5ac0
+[    0.788221]  gp : 00000000000f4dc0 tp : 0000003fdb1ba710 t0 : 0000000000000000
+[    0.788392]  t1 : 0000000000000820 t2 : 00000000000f4390 s0 : 0000000000000000
+[    0.788564]  s1 : 00000000000d7000 a0 : 00000000000f521e a1 : 000000000000000a
+[    0.788739]  a2 : ffffffffffffffff a3 : 0000000000000000 a4 : 0000003fdb2bb9c8
+[    0.788909]  a5 : 0000000000000000 a6 : 000000000000000f a7 : 0000000000000039
+[    0.789083]  s2 : 00000000000ed81d s3 : 0000003fff8f5da8 s4 : 00000000000f5198
+[    0.789255]  s5 : 00000000000f521e s6 : 00000000000ed81d s7 : 00000000000003fe
+[    0.789427]  s8 : 000000000000003c s9 : 000000000000003e s10: 00000000000e4000
+[    0.789601]  s11: 00000000000f521e t3 : ffffffffffffffff t4 : 00000000000f51da
+[    0.789764]  t5 : 0000000000000000 t6 : 0000000000000000
+[    0.789912] status: 0000000200004020 badaddr: fffffffffffffffc cause: 000000000000000c
+
+[01;34m
+ _   _  ____            _     _                  
+| | | |/ ___|__ _ _ __ | |   (_)_ __  _   ___  __
+| | | | |   / _` | '_ \| |   | | '_ \| | | \ \/ /
+| |_| | |__| (_| | | | | |___| | | | | |_| |>  < 
+ \___/ \____\__,_|_| |_|_____|_|_| |_|\__,_/_/\_\
+[0mWelcome to RiscV
+
+UCanLinux login: 

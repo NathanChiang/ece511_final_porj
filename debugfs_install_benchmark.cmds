@@ -1,0 +1,8 @@
+cd /etc
+rm rcS
+write /home/kirby5411/ece511_final_porj/rcS.benchmark rcS
+cd /root
+rm benchmark
+rm wrapper
+write /home/kirby5411/ece511_final_porj/benchmarks/riscv/FFT benchmark
+write /home/kirby5411/ece511_final_porj/benchmarks/riscv/wrapper wrapper

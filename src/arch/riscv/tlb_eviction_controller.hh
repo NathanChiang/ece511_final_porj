@@ -35,6 +35,8 @@ class TlbEvictionController : public SimObject
 
     void notifyEviction(const TlbEntry &entry);
     bool lookup(Addr vpn, uint16_t asid, TlbEntry &entry);
+    void demapPage(Addr vpn, uint16_t asid);
+    void flushAll();
 
     enum class Predictor
     {

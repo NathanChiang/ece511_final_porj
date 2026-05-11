@@ -49,7 +49,7 @@ from gem5.components.cachehierarchies.classic.\
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.isas import ISA
 from gem5.utils.requires import requires
-from gem5.resources.resource import Resource
+from gem5.resources.resource import CustomDiskImageResource, Resource
 from gem5.simulate.simulator import Simulator
 
 # Run a check to ensure the right version of gem5 is being used.
@@ -70,9 +70,10 @@ memory = SingleChannelDDR3_1600()
 #     cpu_type=CPUTypes.TIMING, isa=ISA.RISCV, num_cores=1
 # )
 
-# Boot with atomic for faster kernel boot, switch to timing for more accurate simulation data
 processor = SimpleProcessor(
-    cpu_type=CPUTypes.ATOMIC, isa=ISA.RISCV, num_cores=1
+    cpu_type=CPUTypes.TIMING,
+    isa=ISA.RISCV,
+    num_cores=1,
 )
 
 # Setup the board.
@@ -84,38 +85,31 @@ board = RiscvBoard(
 )
 
 
-core = processor.get_cores()[0]
-mmu = core.get_mmu()
+for core in processor.cores:
+    mmu = core.get_mmu()
 
-for tlb in (mmu.itb, mmu.dtb):
-    ctrl = tlb.eviction_controller
-    ctrl.predictor = "linear"
-    ctrl.linear_bias = -1.25
-    ctrl.linear_threshold = 0.0
-    ctrl.linear_weights = [0.8, 0.5, 1.2, 0.7, 1.0, 0.1, 0.1, 0.0, -0.05]
+    # Stress the DTLB so the victim/linear eviction path has a visible
+    # opportunity to recover recently evicted translations.
+    mmu.dtb.size = 8
+    mmu.dtb.eviction_controller.entries = 4096
+
+    for tlb in (mmu.itb, mmu.dtb):
+        ctrl = tlb.eviction_controller
+        ctrl.predictor = "linear"
+        ctrl.linear_bias = -1.25
+        ctrl.linear_threshold = 0.0
+        ctrl.linear_weights = [0.8, 0.5, 1.2, 0.7, 1.0, 0.1, 0.1, 0.0, -0.05]
 
 
 # Set the Full System workload.
 board.set_kernel_disk_workload(
                    kernel=Resource("riscv-bootloader-vmlinux-5.10"),
-                   disk_image=Resource("riscv-disk-img"),
+                   disk_image=CustomDiskImageResource("riscv-disk.img"),
 )
 
 # simulator = Simulator(board=board)
 
-from gem5.simulate.exit_event import ExitEvent
-
-def handle_exit():
-    processor.switch()   # first EXIT: switch ATOMIC → TIMING
-    yield False          # continue simulation (do not stop)
-    yield True           # second EXIT (from /sbin/m5 exit): stop simulation
-
-simulator = Simulator(
-    board=board,
-    on_exit_event={
-        ExitEvent.EXIT: handle_exit()
-    }
-)
+simulator = Simulator(board=board)
 
 print("Beginning simulation!")
 # Note: This simulation will never stop. You can access the terminal upon boot

@@ -162,6 +162,36 @@ TlbEvictionController::lookup(Addr vpn, uint16_t asid, TlbEntry &entry)
     return false;
 }
 
+void
+TlbEvictionController::demapPage(Addr vpn, uint16_t asid)
+{
+    if (vpn == 0 && asid == 0) {
+        flushAll();
+        return;
+    }
+
+    for (auto it = directory.begin(); it != directory.end();) {
+        const TlbEntry &entry = it->second.entry;
+        const Addr mask = ~(entry.size() - 1);
+        const bool vpn_match = vpn == 0 || (vpn & mask) == entry.vaddr;
+        const bool asid_match = asid == 0 || entry.asid == asid;
+
+        if (vpn_match && asid_match) {
+            insertionOrder.remove(it->first);
+            it = directory.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void
+TlbEvictionController::flushAll()
+{
+    directory.clear();
+    insertionOrder.clear();
+}
+
 uint64_t
 TlbEvictionController::makeKey(Addr vaddr, uint16_t asid) const
 {

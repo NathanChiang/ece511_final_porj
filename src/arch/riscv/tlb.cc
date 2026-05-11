@@ -173,11 +173,17 @@ TLB::insert(Addr vpn, const TlbEntry &entry)
     DPRINTF(TLB, "insert(vpn=%#x, asid=%#x): ppn=%#x pte=%#x size=%#x\n",
         vpn, entry.asid, entry.paddr, entry.pte, entry.size());
 
-    // If somebody beat us to it, just use that existing entry.
-    TlbEntry *newEntry = lookup(vpn, entry.asid, BaseMMU::Read, true);
+    // If somebody beat us to it, just use that existing entry. Do not consult
+    // the victim controller here: a page-table-walk fill must not be replaced
+    // by an older retained victim entry for the same VPN/ASID.
+    TlbEntry *newEntry = trie.lookup(buildKey(vpn, entry.asid));
     if (newEntry) {
         // update PTE flags (maybe we set the dirty/writable flag)
-        newEntry->pte = entry.pte;
+        auto trie_handle = newEntry->trieHandle;
+        *newEntry = entry;
+        newEntry->vaddr = vpn;
+        newEntry->lruSeq = nextSeq();
+        newEntry->trieHandle = trie_handle;
         assert(newEntry->vaddr == vpn);
         return newEntry;
     }
@@ -201,6 +207,9 @@ void
 TLB::demapPage(Addr vpn, uint64_t asid)
 {
     asid &= 0xFFFF;
+
+    if (evictionController)
+        evictionController->demapPage(vpn, asid);
 
     if (vpn == 0 && asid == 0)
         flushAll();
@@ -228,6 +237,9 @@ void
 TLB::flushAll()
 {
     DPRINTF(TLB, "flushAll()\n");
+    if (evictionController)
+        evictionController->flushAll();
+
     for (size_t i = 0; i < size; i++) {
         if (tlb[i].trieHandle)
             remove(i);
